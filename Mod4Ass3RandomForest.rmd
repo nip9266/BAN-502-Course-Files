@@ -1,0 +1,118 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+## Profesorsky BAN 502 Module 4 Assignment 2  
+  
+
+
+```{r message=FALSE, warning=FALSE}
+
+library(tidyverse)
+
+library(caret) #for splitting functions
+
+library(ranger)
+``` 
+
+  
+Loading Blood  
+```{r}
+Blood = read_csv("Blood.csv")
+summary(Blood)
+#str(Blood)
+```
+  
+```{r}
+Blood = Blood %>% mutate(DonatedMarch = as.factor(DonatedMarch)) %>% 
+  mutate(DonatedMarch = fct_recode(DonatedMarch, "No" = "0", "Yes" = "1" )) 
+#summary(Blood)
+```  
+  
+Splitting to train and test  
+```{r}
+set.seed(1234)
+train.rows = createDataPartition(y = Blood$DonatedMarch, p=0.7, list = FALSE) #70% in training
+train = slice(Blood, train.rows) 
+test = slice(Blood, -train.rows)
+```    
+  
+  
+b. Random forest with caret
+```{r}
+fit_control = trainControl(method = "cv",
+                           number = 10) #set up 10 fold cross-validation
+
+set.seed(123)
+rf_fit = train(x=as.matrix(train[,-5]), y=as.matrix(train$DonatedMarch),    
+                method = "ranger",  
+                importance = "permutation",
+                trControl = fit_control,
+               num.trees= 100)
+#note the as.matrix command. Passing a tibble to ranger can result in warnings.
+```
+
+Save the model to a file to load later (if needed)  
+```{r}
+# saveRDS(rf_fit, "rf_fit.rds")
+```
+
+Load the model  
+```{r}
+# rf_fit = readRDS("rf_fit.rds")
+```
+
+Check out random forest details  
+```{r}
+varImp(rf_fit)
+rf_fit
+```
+  
+  
+The most  important variable is TotalDonations 
+  
+The least important Mnths_Since_Last  
+
+
+Predictions  
+```{r}
+predRF = predict(rf_fit)
+head(predRF)
+```
+
+Confusion matrix
+```{r}
+confusionMatrix(predRF, train$DonatedMarch, positive = "Yes")
+```
+  
+The accuracy is 0.9027   
+Sensitivity : 0.6560           
+Specificity : 0.9799  
+  
+#### Task 6  
+The accuracy is 0.9027 and the naive model accuracy is 0.7615. This is a large difference showing the random forest model is much stronger than the naive model  
+  
+  
+#### Task 7    
+Predictions on test
+```{r}
+predRF_test = predict(rf_fit, newdata = test)
+```
+
+Confusion matrix
+```{r}
+confusionMatrix(predRF_test, test$DonatedMarch, positive = "Yes")
+```
+  
+The accuracy on the test model is 0.7723, marginaly higher than the naive model (0.7634). the p value is 0.411 showing that this is not a significant difference. That means that the forst will not be much better that the naive on a new dataset.
+
+#### Task 8  
+I would not recomend this model for real world as it didn't show better results than the naive model. So the effort and resources to use it will provide results that are wrong in high percentage of observations. I suggest using this model to decide what variables are most important and develop a different model (not random forest) with those variables, to get to a better results in the test dataset, and in real life new data.
+
+
+
+
+
+
+
