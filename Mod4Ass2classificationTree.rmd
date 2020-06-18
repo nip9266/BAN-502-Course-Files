@@ -1,0 +1,276 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+## Profesorsky BAN 502 Module 4 Assignment 2  
+  
+
+
+```{r message=FALSE, warning=FALSE}
+
+library(tidyverse)
+library(rattle) 
+library(caret) #for splitting functions
+library(rpart)
+library(RColorBrewer)  
+```
+
+Loading Parole  
+```{r}
+parole = read_csv("parole .csv")
+#summary(parole)
+#str(parole)
+```
+
+Convert the male, race, state, crime, multiple.offenses, and violator variables to factors. 
+```{r}
+parole = parole %>% mutate(race = as.factor(race)) %>% 
+  mutate(race = fct_recode(race, "Otherwise" = "2", "White" = "1" )) 
+
+parole = parole %>% mutate(male = as.factor(male)) %>% 
+  mutate(male = fct_recode(male, "Female" = "0", "Male" = "1" )) 
+
+parole = parole %>% mutate(state = as.factor(state)) %>% 
+  mutate(state = fct_recode(state, "Other" = "1", "Kentucky" = "2" , "Louisiana" ="3", "Virginia" = "4")) 
+
+parole = parole %>% mutate(multiple.offenses = as.factor(multiple.offenses)) %>% 
+  mutate(multiple.offenses = fct_recode(multiple.offenses, "No" = "0", "Yes" = "1" )) 
+
+parole = parole %>% mutate(violator = as.factor(violator)) %>% 
+  mutate(violator = fct_recode(violator, "No" = "0", "Yes" = "1" )) 
+
+parole = parole %>% mutate(crime  = as.factor(crime)) %>% 
+  mutate(crime = fct_recode(crime, "Other" = "1", "Larceny" = "2" , "Drug_Related" ="3", "Driving_Related" = "4")) 
+
+```
+  
+#### Task 1: Split the data (training and testing)   
+  
+```{r}
+set.seed(12345)
+train.rows = createDataPartition(y = parole$violator, p=0.7, list = FALSE) #70% in training
+train = slice(parole, train.rows) 
+test = slice(parole, -train.rows)
+```    
+#### Task 2: create classification tree   
+  
+```{r}
+tree1 = rpart(violator ~., train, method="class")
+fancyRpartPlot(tree1)
+```
+  
+  
+The 1st decision is: the Parolee state: Is it [Other, Kentucky or Virginia] – our answer is **NO** as the parolee is from Louisiana.                  
+
+The 2nd decision is about Race- white? We don’t know the parolee’s race so it might be one of the options:
+      2a. If their race is white: If **NO** go left and finish in a leaf that is No (4%)   
+**So for parolee that is from LA and is not white- the tree suggests the most likely will not violate the parole.**   
+      2b. If their race is white:  Move to the right to the box that says **yes**, the next decision point:  
+      
+The 3rd decision: the time served: >= 3.5 years: the parolee is serving a 5 year sentence so yes it is bigger than 3.5 years. (I assume it means that he served 5 years.) so moving to the right side of choice lead us to the right mpst leaf: **Yes**  and 4%
+**So for parolee that is from LA and is white- and served more than 3.5 years, the tree suggests he most likely will violate the parole.**
+
+  
+  
+#### Task 4- CP   
+  
+```{r}
+printcp(tree1)
+plotcp(tree1)
+```  
+
+  
+The Cp that we should choose is the one presenting the lowest xerror: This will be the 1st line in the table: Cp is 0.03, the crossoner error is 1.   
+  
+#### Task 5: Pruning   
+
+
+```{r}
+tree2 = prune(tree1,cp= tree1$cptable[which.min(tree1$cptable[,"xerror"]),"CP"])
+```
+
+```{r}
+printcp(tree2)
+plotcp(tree2)
+```  
+  
+The majority class in the naive tree is **Not Violators**  
+
+
+
+#### Task 6 Predicting for training dataset
+  
+```{r}
+treepred = predict(tree1, train, type = "class")
+head(treepred)
+```  
+
+
+
+Caret confusion matrix and accuracy, etc. calcs  
+```{r}
+confusionMatrix(treepred,train$violator,positive="Yes") #predictions first then actual
+```
+
+Accuracy =0.9027 (90.2%). The naive accuracy (no information rate) = 0.8837 (88.4%).   
+Sensitivity is 0.490191
+Specificity is 0.95694
+
+
+
+
+#### Task 7 Predicting for test dataset
+
+Predictions on testing set  
+```{r}
+treepred_test = predict(tree1, test, type = "class")
+head(treepred_test)
+```
+
+Caret confusion matrix and accuracy, etc. calcs  
+
+  
+  
+```{r}
+confusionMatrix(treepred_test,test$violator,positive="Yes") #predictions first then actual
+```
+
+The test accuracy is 89.6%, a bit under the 90.2 of the training data. But a good accuracy over all.
+This simmilarity between the training and the test dataset, means that there was not overfitting.
+Sensitivity for the test dataset is 0.43479 = close to the 0.490191 of the training set.
+Specificity is 0.95531 for the test, vs. 0.95694 in the actual.
+In closing - the model is a high quality model with minor changes in strength between the training and the test data sets results.This model will provide quality prediction in the real world.  
+  
+## -----------------------------------------------------------------------------------------
+## Changing Dataset to Blood - Exercise 2  
+## -----------------------------------------------------------------------------------------
+
+  
+
+```{r}
+
+library(tidyverse)
+library(rattle) 
+library(caret) #for splitting functions
+library(rpart)
+library(RColorBrewer)  
+library("GGally")
+library("car")
+library(ggcorrplot) #create an alternative to ggcorr plots
+```
+  
+#### Task 8  
+  
+Loading Blood  
+```{r}
+Blood = read_csv("Blood.csv")
+summary(Blood)
+#str(Blood)
+```
+  
+```{r}
+Blood = Blood %>% mutate(DonatedMarch = as.factor(DonatedMarch)) %>% 
+  mutate(DonatedMarch = fct_recode(DonatedMarch, "No" = "0", "Yes" = "1" )) 
+summary(Blood)
+```
+  
+Plotting with outliers    
+```{r}
+ggplot(Blood, aes(x=Mnths_Since_First)) +geom_histogram()
+ggplot(Blood, aes(x=Mnths_Since_Last)) +geom_histogram()
+ggplot(Blood, aes(x=TotalDonations)) +geom_histogram()
+ggplot(Blood, aes(x=Total_Donated)) +geom_histogram()
+```    
+  
+Splitting to Train and Test
+  
+  
+```{r}
+set.seed(1234)
+train.rows = createDataPartition(y = Blood$DonatedMarch, p=0.7, list = FALSE) #70% in training
+trainc = slice(Blood, train.rows) 
+testc = slice(Blood, -train.rows)
+```    
+
+##### Visualize train data set
+```{r}
+summary(trainc)
+str(trainc)
+```
+
+
+##### create classification tree   
+  
+```{r}
+treec = rpart(DonatedMarch ~., trainc, method="class")
+fancyRpartPlot(treec)
+```  
+  
+##### Evaluate Cp  
+```{r}
+printcp(treec)
+plotcp(treec)
+```  
+  
+The cp for this model with the minimum xerror is 0.01. the xerror is 0.848. With 4 splits.      
+  
+
+  
+### Task 10  
+  
+Pruning
+```{r}
+treec2 = prune(treec,cp= treec$cptable[which.min(treec$cptable[,"xerror"]),"CP"])
+```
+  
+```{r}
+#treec2 = rpart(DonatedMarch ~., trainc, method="class")
+#fancyRpartPlot(treec2)
+```    
+  
+  
+
+#### Predicting for training dataset
+  
+```{r}
+treecpred = predict(treec2, trainc, type = "class")
+head(treecpred)
+```  
+
+
+
+Caret confusion matrix and accuracy, etc. calcs  
+```{r}
+confusionMatrix(treecpred, trainc$DonatedMarch,positive="Yes") #predictions first then actual
+```
+
+Accuracy =0.813 
+Sensitivity is 0.4480 
+Specificity is 0.9273 
+
+
+
+
+#### Predicting for test dataset
+
+Predictions on testing set  
+```{r}
+treecpred_test = predict(treec2, testc, type = "class")
+head(treecpred_test)
+```
+
+Caret confusion matrix and accuracy, etc. calcs  
+
+  
+  
+```{r}
+confusionMatrix(treecpred_test,testc$DonatedMarch,positive="Yes") #predictions first then actual
+```    
+  
+Test dataset predictions:
+
+
+Accuracy =0.7768 vs. the 0.813 for the train dataset - the train and test accurcy is closer with the outliers included.
+Sensitivity is 0.33962 vs. 0.4480 for the train dataset
+Specificity is 0.91228 vs. 0.9273 for the train dataset
